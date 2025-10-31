@@ -1,0 +1,143 @@
+#!/bin/python
+
+# Emacs RUnner is a simple script that does exactly one thing - it
+# runs Emacs.
+
+import subprocess
+import tomllib
+import curses
+import shlex
+import os
+
+
+class Emacs:
+    # Flags that apply to all of the Emacs instances.
+    flags = []
+
+    def __init__(
+        self,
+        command: list[str] | str = None,
+        env: dict[str, str] = None,
+        timeout: int = 3,
+    ):
+        "Initialize emacs with given command."
+
+        if command is not None and "emacs" not in command:
+            raise ValueError
+
+        if isinstance(command, str):
+            self.command = shlex.split(command)
+        else:
+            self.command = command
+
+        if env is not None:
+            self.env = os.environ.update(env)
+        else:
+            self.env = os.environ
+
+        self.timeout = timeout
+
+    def start(self):
+        if self.command is not None:
+            e = subprocess.Popen(
+                [*self.command, *self.flags],
+                env=self.env,
+                start_new_session=True,
+            )
+        else:
+            e = subprocess.Popen(
+                ["emacs", *self.flags], env=self.env, start_new_session=True
+            )
+        try:
+            e.wait(timeout=self.timeout)
+        except subprocess.TimeoutExpired:
+            return
+        else:
+            print(f"Emacs exited with code {e.returncode}")
+
+
+class Screen:
+    def __init__(
+        self, launch_configs: list[dict[str, dict]] = None, timeout: int = 1
+    ) -> None:
+        self.launch_configs = launch_configs
+        self.timeout = timeout
+        self.stdsrc: curses.window
+
+    def initscr(self) -> None:
+        "Initialize curses and an interface."
+
+        if self.launch_configs is None:
+            Emacs(timeout=self.timeout).start()
+            return
+
+        self.stdsrc = curses.initscr()
+
+        curses.noecho()
+        curses.cbreak()
+
+        self.stdsrc.clear()
+
+        start_line = 1
+        start_col = 1
+        lc_key_table = {}
+
+        self.stdsrc.box()
+
+        self.stdsrc.addstr(
+            start_line,
+            start_col,
+            "Choose the manifest you want to use (or press any key):",
+        )
+        start_line += 2
+
+        for lc in self.launch_configs:
+            lc_key_table.update({lc.get("key"): lc})
+            # Here the displayed name is chosen.
+            if lc.get("alias") is not None:
+                alias = lc.get("alias")
+            elif lc.get("command") is not None:
+                alias = lc.get("command")
+            else:
+                alias = "emacs"
+            self.stdsrc.addstr(start_line, start_col, f"{lc['key']}: {alias}")
+            start_line += 1
+
+        self.stdsrc.move(0, 0)
+        self.stdsrc.refresh()
+        choice = self.stdsrc.getkey()
+
+        if choice in lc_key_table.keys():
+            self.start(lc_key_table[choice])
+        else:
+            self.start()
+
+    def start(self, choice: dict = None) -> None:
+        "Start with a chosen launch configuration."
+        if choice is not None:
+            e = Emacs(
+                command=choice.get("command"),
+                env=choice.get("env"),
+                timeout=self.timeout,
+            )
+        else:
+            e = Emacs(timeout=self.timeout)
+        e.start()
+        curses.endwin()
+
+
+def main():
+    config_dir = os.getenv('XDG_CONFIG_HOME')
+    if config_dir is None:
+        config_dir = f"{os.getenv('HOME')}/.config/"
+
+    with open(f"{config_dir}/eru/config.toml", "rb") as file:
+        config = tomllib.load(file)
+
+    Emacs.flags = config.get("general").get("flags")
+    s = Screen(config.get("launch_configs"))
+    s.initscr()
+
+
+if __name__ == "__main__":
+    main()

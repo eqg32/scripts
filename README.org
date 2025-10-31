@@ -1,0 +1,60 @@
+* Introduction
+
+This is a collection of the scripts that I just use daily in combination with ~swayfx~.
+
+* sound-control
+
+Simple script used for controlling sound with ~pulsemixer~ and displaying current volume.
+
+Usage:
+
+#+begin_src bash
+  sound-control increase       # increases sound by 5
+  sound-control increase -v 10 # increases sound by 10
+  sound-control decrease       # decreases sound by 5
+  sound-control decrease -v 10 # decreases sound by 10
+  sound-control mute           # mutes sound
+#+end_src
+
+* eru
+
+~eru~ stands for "Emacs RUnner". You can configure it to run Emacs in different environments and with different environmental variables. 
+
+** Configuration
+
+To configure ~eru~, you just place a ~config.toml~ in ~$XDG_CONFIG_HOME/eru/~ directory. The example of a configuration is found below.
+
+#+begin_src toml
+  [general]
+
+  flags = ["-ib", "12"]
+
+  [[launch_configs]]
+
+  command = "some command"
+  alias = "some alias"
+  key = "a"
+
+  [launch_configs.env]
+
+  SOME_ENVVAR = "some_env_var"
+#+end_src
+
+*** ~general~ section
+
+- ~flags~ is a list of flags that are applied to all of the Emacs instances run from ~eru~.
+
+*** ~launch_configs~ section
+
+- ~command~ is a command that is run.
+- ~alias~ is a displayed name of your configuration.
+- ~key~ is a key you press to choose your launch configuration and it is the only required field. Other are optional.
+- ~env~ is a table of environmental variables.
+
+** Usage
+
+~eru~ is designed to be used with a tiling window manager like ~sway~. To get the most of it, one should place a line like below in their config. After reloading, everything should work just fine.
+
+#+begin_src
+  bindsym $mod+Shift+Return exec alacritty --command eru
+#+end_src

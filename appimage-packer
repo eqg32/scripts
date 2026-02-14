@@ -184,7 +184,7 @@ def main() -> None:
         "-p",
         "--packaging-tool",
         help="Path to the executable AppImageTool AppImage.",
-        required=True,
+        default="appimagetool.AppImage",
     )
     parser.add_argument(
         "-d", "--directory", help="The output AppDir directory."

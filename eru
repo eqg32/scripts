@@ -127,7 +127,7 @@ class Screen:
 
 
 def main():
-    config_dir = os.getenv('XDG_CONFIG_HOME')
+    config_dir = os.getenv("XDG_CONFIG_HOME")
     if config_dir is None:
         config_dir = f"{os.getenv('HOME')}/.config/"
 

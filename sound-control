@@ -7,9 +7,7 @@ class SoundControl:
     @staticmethod
     def increase(percent: int = 5) -> None:
         subprocess.run(["pulsemixer", "--change-volume", f"+{percent}"])
-        output = subprocess.run(
-            ["pulsemixer", "--get-volume"], stdout=subprocess.PIPE
-        )
+        output = subprocess.run(["pulsemixer", "--get-volume"], stdout=subprocess.PIPE)
         volume = output.stdout.split()[0]
         subprocess.run(
             [
@@ -24,9 +22,7 @@ class SoundControl:
     @staticmethod
     def decrease(percent: int = 5) -> None:
         subprocess.run(["pulsemixer", "--change-volume", f"-{percent}"])
-        output = subprocess.run(
-            ["pulsemixer", "--get-volume"], stdout=subprocess.PIPE
-        )
+        output = subprocess.run(["pulsemixer", "--get-volume"], stdout=subprocess.PIPE)
         volume = output.stdout.split()[0]
         subprocess.run(
             [
@@ -41,9 +37,7 @@ class SoundControl:
     @staticmethod
     def mute() -> None:
         subprocess.run(["pulsemixer", "--toggle-mute"])
-        output = subprocess.run(
-            ["pulsemixer", "--get-mute"], stdout=subprocess.PIPE
-        )
+        output = subprocess.run(["pulsemixer", "--get-mute"], stdout=subprocess.PIPE)
         muted = output.stdout.decode()[0]
         if muted == "1":
             mute_state = "Muted"
@@ -57,9 +51,7 @@ def main() -> None:
         prog="sound-control",
         description="Program to control sound and show the volume.",
     )
-    parser.add_argument(
-        "action", help='Can be: "increase", "decrease", "mute".'
-    )
+    parser.add_argument("action", help='Can be: "increase", "decrease", "mute".')
     parser.add_argument("-v", "--value", help="Number")
     args = parser.parse_args()
     match args.action:

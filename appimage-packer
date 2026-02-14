@@ -133,7 +133,10 @@ Categories=Utility;"""
         try:
             os.mkdir(self.output_dir)
         except FileExistsError:
-            if self.output_dir in [".", "/"]:
+            if self.output_dir in [".", "/", "./"]:
+                logging.warn(
+                    "Think twice before doing it. Check the source code."
+                )
                 raise SystemExit(1)
             shutil.rmtree(self.output_dir)
             os.mkdir(self.output_dir)

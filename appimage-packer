@@ -138,6 +138,12 @@ Categories=Utility;"""
                     "Think twice before doing it. Check the source code."
                 )
                 raise SystemExit(1)
+            print(
+                f"Directory {self.output_dir} will be destroyed."
+                + "\nAre you sure you want to continue?"
+                + "\nIf so, press Enter, or else press Ctrl-C immediately!"
+            )
+            input("Continue? ")
             shutil.rmtree(self.output_dir)
             os.mkdir(self.output_dir)
 

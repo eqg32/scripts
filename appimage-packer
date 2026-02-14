@@ -83,11 +83,12 @@ Categories=Utility;"""
             self.output_dir: str = f"/tmp/{self.name}.AppDir"
 
     # bootstrap all the necessary directories and package an AppImage
-    def __call__(self) -> None:
+    def __call__(self, appdir_only: bool = False) -> None:
         self.bootstrap_dirs()
         self.bootstrap_root()
         self.bootstrap_usr()
-        self.package()
+        if not appdir_only:
+            self.package()
 
     def ldd_stdout(self) -> bytes:
         try:
@@ -132,6 +133,8 @@ Categories=Utility;"""
         try:
             os.mkdir(self.output_dir)
         except FileExistsError:
+            if self.output_dir in [".", "/"]:
+                raise SystemExit(1)
             shutil.rmtree(self.output_dir)
             os.mkdir(self.output_dir)
 
@@ -189,9 +192,15 @@ def main() -> None:
     parser.add_argument(
         "-d", "--directory", help="The output AppDir directory."
     )
+    parser.add_argument(
+        "--appdir-only",
+        help="Make only an AppDir.",
+        action="store_true",
+        default=False,
+    )
     args = parser.parse_args()
     packer = Packer(args.executable_path, args.directory, args.packaging_tool)
-    packer()
+    packer(args.appdir_only)
 
 
 if __name__ == "__main__":

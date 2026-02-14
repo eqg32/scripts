@@ -63,7 +63,7 @@ To configure ~eru~, you just place a ~config.toml~ in ~$XDG_CONFIG_HOME/eru/~ di
 
 ~appimage-packer~'s name stands for it's purpose. Here is an output of ~appimage-packer -h~:
 
-#+begin_src bash
+#+begin_src
 usage: AppImage Packer [-h] -e EXECUTABLE_PATH -p PACKAGING_TOOL [-d DIRECTORY]
 
 A script for packaging AppImages.

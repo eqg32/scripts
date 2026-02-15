@@ -76,24 +76,30 @@ Categories=Utility;"""
         packaging_tool: str = "appimagetool.AppImage",
     ) -> None:
         self.name: str = executable_path.split("/")[-1]
-        self.executable_path: str = executable_path
-        self.libraries: list[str] = self.get_libraries()
-        self.packaging_tool = packaging_tool
+        self.executable_path: str = pathlib.Path(executable_path)
+        self.packaging_tool: str = packaging_tool
 
         if output_dir:
-            self.output_dir: str = self.absolute_path(output_dir)
+            self.output_dir: pathlib.Path = pathlib.Path(output_dir)
         else:
-            self.output_dir: str = self.absolute_path(
+            self.output_dir: pathlib.Path = pathlib.Path(
                 f"/tmp/{self.name}.AppDir"
             )
 
     # bootstrap all the necessary directories and package an AppImage
-    def __call__(self, appdir_only: bool = False, path: str = ".") -> None:
+    def __call__(
+        self,
+        path: str = ".",
+        only_appdir: bool = False,
+        keep_appdir: bool = False,
+    ) -> None:
         self.bootstrap_dirs()
         self.bootstrap_root()
         self.bootstrap_usr()
-        if not appdir_only:
+        if not only_appdir:
             self.package(path)
+        if not (only_appdir or keep_appdir):
+            self.cleanup()
 
     def ldd_stdout(self) -> bytes:
         try:
@@ -118,7 +124,7 @@ Categories=Utility;"""
                 [
                     self.packaging_tool,
                     self.output_dir,
-                    f"{self.absolute_path(path)}/{self.name}.AppImage",
+                    pathlib.Path(f"{path}/{self.name}.AppImage"),
                 ],
                 check=True,
             )
@@ -132,11 +138,10 @@ Categories=Utility;"""
         postfix = "".join(
             random.choices(string.digits + string.ascii_letters, k=8)
         )
-        self.output_dir += postfix
+        self.output_dir = pathlib.Path(f"{self.output_dir}.{postfix}")
 
-    @staticmethod
-    def absolute_path(path: str) -> str:
-        return str(pathlib.Path(path).absolute())
+    def cleanup(self) -> None:
+        shutil.rmtree(self.output_dir)
 
     # make the basic structure
     def bootstrap_root(self) -> None:
@@ -146,13 +151,13 @@ Categories=Utility;"""
 
     def bootstrap_dirs(self) -> None:
         try:
-            os.mkdir(self.output_dir)
+            self.output_dir.mkdir()
         except FileExistsError:
             self.make_postfix()
-            os.mkdir(self.output_dir)
+            self.output_dir.mkdir()
 
         for subpath in ["usr", "usr/lib", "usr/bin"]:
-            os.mkdir(f"{self.output_dir}/{subpath}")
+            pathlib.Path(self.output_dir, subpath).mkdir()
 
     def bootstrap_icon(self) -> None:
         with open(f"{self.output_dir}/icon.svg", "x") as icon:
@@ -173,7 +178,7 @@ Categories=Utility;"""
             )
 
     def bootstrap_usr(self) -> None:
-        for library in self.libraries:
+        for library in self.get_libraries():
             try:
                 shutil.copy(library, f"{self.output_dir}/usr/lib/")
             except FileNotFoundError:
@@ -212,14 +217,20 @@ def main() -> None:
         default=".",
     )
     parser.add_argument(
-        "--appdir-only",
-        help="Make only an AppDir.",
+        "--only-appdir",
+        help="Make an AppDir only.",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--keep-appdir",
+        help="Keep an AppDir after packaging.",
         action="store_true",
         default=False,
     )
     args = parser.parse_args()
     packer = Packer(args.executable_path, args.directory, args.packaging_tool)
-    packer(args.appdir_only, args.output)
+    packer(args.output, args.only_appdir, args.keep_appdir)
 
 
 if __name__ == "__main__":

@@ -64,7 +64,7 @@ To configure ~eru~, you just place a ~config.toml~ in ~$XDG_CONFIG_HOME/eru/~ di
 ~appimage-packer~'s name stands for it's purpose. Here is an output of ~appimage-packer -h~:
 
 #+begin_src
-usage: AppImage Packer [-h] -e EXECUTABLE_PATH [-p PACKAGING_TOOL] [-d DIRECTORY] [-o OUTPUT] [--appdir-only]
+usage: AppImage Packer [-h] -e EXECUTABLE_PATH [-p PACKAGING_TOOL] [-d DIRECTORY] [-o OUTPUT] [--only-appdir] [--keep-appdir]
 
 A script for packaging AppImages.
 
@@ -77,7 +77,8 @@ options:
   -d, --directory DIRECTORY
                         The output AppDir directory.
   -o, --output OUTPUT   The output AppImage file directory.
-  --appdir-only         Make only an AppDir.
+  --only-appdir         Make an AppDir only.
+  --keep-appdir         Keep an AppDir after packaging.
 #+end_src
 
 All the ~AppDir~ directories by default are generated in ~/tmp/~ directory and an output AppImage is put at ~cwd~. If an AppImage does not work properly, go to the ~AppDir~ and add/edit files, that are to be used by the binary.

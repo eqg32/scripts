@@ -7,6 +7,9 @@ import argparse
 import shutil
 import logging
 import os
+import random
+import string
+import pathlib
 
 logging.basicConfig(format="%(levelname)s:%(message)s")
 
@@ -78,17 +81,19 @@ Categories=Utility;"""
         self.packaging_tool = packaging_tool
 
         if output_dir:
-            self.output_dir: str = output_dir
+            self.output_dir: str = self.absolute_path(output_dir)
         else:
-            self.output_dir: str = f"/tmp/{self.name}.AppDir"
+            self.output_dir: str = self.absolute_path(
+                f"/tmp/{self.name}.AppDir"
+            )
 
     # bootstrap all the necessary directories and package an AppImage
-    def __call__(self, appdir_only: bool = False) -> None:
+    def __call__(self, appdir_only: bool = False, path: str = ".") -> None:
         self.bootstrap_dirs()
         self.bootstrap_root()
         self.bootstrap_usr()
         if not appdir_only:
-            self.package()
+            self.package(path)
 
     def ldd_stdout(self) -> bytes:
         try:
@@ -107,13 +112,13 @@ Categories=Utility;"""
         lines: list[str] = self.ldd_stdout().decode().split()
         return list(filter(lambda i: "/lib" in i, lines))
 
-    def package(self) -> None:
+    def package(self, path: str = ".") -> None:
         try:
             sp.run(
                 [
                     self.packaging_tool,
                     self.output_dir,
-                    f"{self.name}.AppImage",
+                    f"{self.absolute_path(path)}/{self.name}.AppImage",
                 ],
                 check=True,
             )
@@ -122,6 +127,16 @@ Categories=Utility;"""
         except sp.CalledProcessError:
             logging.error(f"{self.packaging_tool} exited with errors!")
             raise SystemExit(1)
+
+    def make_postfix(self) -> None:
+        postfix = "".join(
+            random.choices(string.digits + string.ascii_letters, k=8)
+        )
+        self.output_dir += postfix
+
+    @staticmethod
+    def absolute_path(path: str) -> str:
+        return str(pathlib.Path(path).absolute())
 
     # make the basic structure
     def bootstrap_root(self) -> None:
@@ -133,18 +148,7 @@ Categories=Utility;"""
         try:
             os.mkdir(self.output_dir)
         except FileExistsError:
-            if self.output_dir in [".", "/", "./"]:
-                logging.warn(
-                    "Think twice before doing it. Check the source code."
-                )
-                raise SystemExit(1)
-            print(
-                f"Directory {self.output_dir} will be destroyed."
-                + "\nAre you sure you want to continue?"
-                + "\nIf so, press Enter, or else press Ctrl-C immediately!"
-            )
-            input("Continue? ")
-            shutil.rmtree(self.output_dir)
+            self.make_postfix()
             os.mkdir(self.output_dir)
 
         for subpath in ["usr", "usr/lib", "usr/bin"]:
@@ -202,6 +206,12 @@ def main() -> None:
         "-d", "--directory", help="The output AppDir directory."
     )
     parser.add_argument(
+        "-o",
+        "--output",
+        help="The output AppImage file directory.",
+        default=".",
+    )
+    parser.add_argument(
         "--appdir-only",
         help="Make only an AppDir.",
         action="store_true",
@@ -209,7 +219,7 @@ def main() -> None:
     )
     args = parser.parse_args()
     packer = Packer(args.executable_path, args.directory, args.packaging_tool)
-    packer(args.appdir_only)
+    packer(args.appdir_only, args.output)
 
 
 if __name__ == "__main__":

@@ -182,7 +182,7 @@ Categories=Utility;"""
         try:
             shutil.copy(self.executable_path, f"{self.output_dir}/usr/bin")
         except FileNotFoundError:
-            logging(f"File {self.executable_path} not found!")
+            logging.error(f"File {self.executable_path} not found!")
             raise SystemExit(1)
 
 

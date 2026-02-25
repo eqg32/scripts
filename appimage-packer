@@ -90,6 +90,7 @@ Categories=Utility;"""
     def __call__(
         self,
         path: str = ".",
+        arch: str = "x86_64",
         only_appdir: bool = False,
         keep_appdir: bool = False,
     ) -> None:
@@ -97,7 +98,7 @@ Categories=Utility;"""
         self.bootstrap_root()
         self.bootstrap_usr()
         if not only_appdir:
-            self.package(path)
+            self.package(path, arch)
         if not (only_appdir or keep_appdir):
             self.cleanup()
 
@@ -108,9 +109,12 @@ Categories=Utility;"""
             )
         except OSError:
             logging.error(f"Could not execute {self.packaging_tool}!")
-        except sp.CalledProcessError:
-            logging.error("ldd exited with errors!")
-            raise SystemExit(1)
+        except sp.CalledProcessError as e:
+            if e.returncode == 127:
+                logging.error("ldd exited with errors!")
+                raise SystemExit(1)
+            if e.returncode == 1:
+                return e.stdout
         else:
             return proc.stdout
 
@@ -118,8 +122,10 @@ Categories=Utility;"""
         lines: list[str] = self.ldd_stdout().decode().split()
         return list(filter(lambda i: "/lib" in i, lines))
 
-    def package(self, path: str = ".") -> None:
+    def package(self, path: str = ".", arch: str = "x86_64") -> None:
         try:
+            env = os.environ.copy()
+            env.update({"ARCH": arch})
             sp.run(
                 [
                     self.packaging_tool,
@@ -127,6 +133,7 @@ Categories=Utility;"""
                     pathlib.Path(f"{path}/{self.name}.AppImage"),
                 ],
                 check=True,
+                env=env,
             )
         except OSError:
             logging.error(f"Could not execute {self.packaging_tool}!")
@@ -217,6 +224,11 @@ def main() -> None:
         default=".",
     )
     parser.add_argument(
+        "--arch",
+        help="ARCH of an AppImage.",
+        default="x86_64",
+    )
+    parser.add_argument(
         "--only-appdir",
         help="Make an AppDir only.",
         action="store_true",
@@ -230,7 +242,7 @@ def main() -> None:
     )
     args = parser.parse_args()
     packer = Packer(args.executable_path, args.directory, args.packaging_tool)
-    packer(args.output, args.only_appdir, args.keep_appdir)
+    packer(args.output, args.arch, args.only_appdir, args.keep_appdir)
 
 
 if __name__ == "__main__":

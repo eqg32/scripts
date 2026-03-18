@@ -243,8 +243,10 @@ def main() -> None:
         default=False,
     )
     args = parser.parse_args()
-    packer = Packer(args.executable_path, args.directory, args.packaging_tool)
-    packer(args.output, args.arch, args.only_appdir, args.keep_appdir)
+    packer = Packer(
+        args.executable_path, args.output_directory, args.packaging_tool
+    )
+    packer(args.output_file, args.arch, args.only_appdir, args.keep_appdir)
 
 
 if __name__ == "__main__":

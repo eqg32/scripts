@@ -215,11 +215,13 @@ def main() -> None:
         default="appimagetool.AppImage",
     )
     parser.add_argument(
-        "-d", "--directory", help="The output AppDir directory."
+        "-od",
+        "--output-directory",
+        help="The output AppDir directory.",
     )
     parser.add_argument(
-        "-o",
-        "--output",
+        "-of",
+        "--output-file",
         help="The output AppImage file directory.",
         default=".",
     )

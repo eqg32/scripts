@@ -46,6 +46,11 @@ Categories=Utility;"""
         executable_path: str,
         output_dir: str | None = None,
         packaging_tool: str = "appimagetool.AppImage",
+        path: str = ".",
+        arch: str = "x86_64",
+        only_appdir: bool = False,
+        keep_appdir: bool = False,
+        extension: str | None = None,
     ) -> None:
         self.name: str = executable_path.split("/")[-1]
         self.executable_path: str = pathlib.Path(executable_path)
@@ -55,22 +60,20 @@ Categories=Utility;"""
             if output_dir
             else pathlib.Path(f"/tmp/{self.name}.AppDir")
         )
+        self.path = path
+        self.arch = arch
+        self.only_appdir = only_appdir
+        self.keep_appdir = keep_appdir
+        self.extension = extension
 
     # bootstrap all the necessary directories and package an AppImage
-    def __call__(
-        self,
-        path: str = ".",
-        arch: str = "x86_64",
-        only_appdir: bool = False,
-        keep_appdir: bool = False,
-        extension: str | None = None,
-    ) -> None:
+    def __call__(self) -> None:
         self.bootstrap_dirs()
         self.bootstrap_root()
         self.bootstrap_usr()
-        if not only_appdir:
-            self.package(path, arch, extension)
-        if not (only_appdir or keep_appdir):
+        if not self.only_appdir:
+            self.package()
+        if not (self.only_appdir or self.keep_appdir):
             self.cleanup()
 
     def _ldd_stdout(self) -> bytes:
@@ -99,25 +102,18 @@ Categories=Utility;"""
         )
         self.output_dir = pathlib.Path(f"{self.output_dir}.{postfix}")
 
-    def _make_name(self, extension: str | None = None) -> str:
-        if extension:
-            return f"{self.name}.{extension}"
-        return self.name
+    def _make_name(self) -> str:
+        return f"{self.name}.{self.extension}" if self.extension else self.name
 
-    def package(
-        self,
-        path: str = ".",
-        arch: str = "x86_64",
-        extension: str | None = None,
-    ) -> None:
+    def package(self) -> None:
         try:
             env = os.environ.copy()
-            env.update({"ARCH": arch})
+            env.update({"ARCH": self.arch})
             sp.run(
                 [
                     self.packaging_tool,
                     self.output_dir,
-                    pathlib.Path(f"{path}/{self._make_name(extension)}"),
+                    pathlib.Path(f"{self.path}/{self._make_name()}"),
                 ],
                 check=True,
                 env=env,
@@ -230,15 +226,16 @@ def main() -> None:
     )
     args = parser.parse_args()
     packer = Packer(
-        args.executable_path, args.output_appdir_path, args.packaging_tool
-    )
-    packer(
+        args.executable_path,
+        args.output_appdir_path,
+        args.packaging_tool,
         args.output_file_path,
         args.arch,
         args.only_appdir,
         args.keep_appdir,
         args.extension,
     )
+    packer()
 
 
 if __name__ == "__main__":

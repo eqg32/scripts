@@ -84,11 +84,12 @@ Categories=Utility;"""
         except OSError:
             logging.error(f"Could not execute {self.packaging_tool}!")
         except sp.CalledProcessError as e:
-            if e.returncode == 127:
-                logging.error("ldd exited with errors!")
-                raise SystemExit(1)
-            if e.returncode == 1:
-                return e.stdout
+            match e.returncode:
+                case 127:
+                    logging.error("ldd exited with errors!")
+                    raise SystemExit(1)
+                case 1:
+                    return e.stdout
         else:
             return proc.stdout
 
@@ -106,9 +107,9 @@ Categories=Utility;"""
         return f"{self.name}.{self.extension}" if self.extension else self.name
 
     def package(self) -> None:
+        env = os.environ.copy()
+        env["ARCH"] = self.arch
         try:
-            env = os.environ.copy()
-            env.update({"ARCH": self.arch})
             sp.run(
                 [
                     self.packaging_tool,

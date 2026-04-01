@@ -52,10 +52,10 @@ Categories=Utility;"""
         keep_appdir: bool = False,
         extension: str | None = None,
     ) -> None:
-        self.name: str = executable_path.split("/")[-1]
-        self.executable_path: str = pathlib.Path(executable_path)
-        self.packaging_tool: str = packaging_tool
-        self.output_dir: pathlib.Path = (
+        self.name = executable_path.split("/")[-1]
+        self.executable_path = pathlib.Path(executable_path)
+        self.packaging_tool = packaging_tool
+        self.output_dir = (
             pathlib.Path(output_dir)
             if output_dir
             else pathlib.Path(f"/tmp/{self.name}.AppDir")
@@ -94,7 +94,7 @@ Categories=Utility;"""
             return proc.stdout
 
     def _get_libraries(self) -> list[str]:
-        lines: list[str] = self._ldd_stdout().decode().split()
+        lines = self._ldd_stdout().decode().split()
         return list(filter(lambda i: "/lib" in i, lines))
 
     def _make_postfix(self) -> None:

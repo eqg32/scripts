@@ -2,94 +2,141 @@
 
 # A script used for packaging AppImage.
 
-import subprocess as sp
-import argparse
-import shutil
+from subprocess import run, CalledProcessError, PIPE
+from typing import Iterable, ClassVar
+from argparse import ArgumentParser
+from dataclasses import dataclass
+from contextlib import suppress
+from shutil import copyfile, rmtree
+from pathlib import Path
 import logging
-import random
-import string
-import pathlib
 import os
 
 logging.basicConfig(format="%(levelname)s:%(message)s")
 
 
-class Packer:
-    permissions = 0o755
+@dataclass
+class Layout:
+    paths: Iterable[Path]
+    root_dir: Path = Path("AppDir")
+    symlinks: Iterable[Iterable[Path]] = ()
 
-    apprun_content = r"""#!/bin/sh
+    def _make_dirs(self) -> None:
+        for path in self.paths:
+            path = self.root_dir / path
+            path.mkdir(parents=True, exist_ok=True)
+
+    def _make_symlinks(self) -> None:
+        for path, target in self.symlinks:
+            path = self.root_dir / path
+            with suppress(FileExistsError):
+                path.symlink_to(target, target_is_directory=True)
+
+    def make_layout(self) -> None:
+        self._make_dirs()
+        self._make_symlinks()
+
+
+@dataclass
+class AppDirBootstraper:
+    permissions: ClassVar[int] = 0o755
+    apprun_content: ClassVar[str] = r"""#!/bin/sh
 SELF=$(readlink -f "$0")
 HERE=${SELF%/*}
-
 export PATH="${HERE}/usr/bin:$PATH"
 export LD_LIBRARY_PATH="${HERE}/usr/lib:$LD_LIBRARY_PATH"
-
 EXEC=$(grep -e '^Exec=' "${HERE}"/*.desktop \
     | head -n 1 \
     | cut -d '=' -f 2 \
     | cut -d ' ' -f 1)
 exec "${EXEC}" "$@"
 """
-
-    desktop_content = """[Desktop Entry]
+    desktop_content: ClassVar[str] = """[Desktop Entry]
 Name={name}
 Exec={executable}
 Icon=icon
 Type=Application
 Categories=Utility;"""
+    icon: ClassVar[str] = ""
 
-    # license for the icon can be found here https://github.com/mozilla/fxemoji
-    icon = ""
+    executable_name: str
+    root_dir: Path = Path("AppDir")
 
-    def __init__(
-        self,
-        executable_path: str,
-        output_dir: str | None = None,
-        packaging_tool: str = "appimagetool.AppImage",
-        path: str = ".",
-        arch: str = "x86_64",
-        only_appdir: bool = False,
-        keep_appdir: bool = False,
-        extension: str | None = None,
-    ) -> None:
-        self.name = executable_path.split("/")[-1]
-        self.executable_path = pathlib.Path(executable_path)
-        self.packaging_tool = packaging_tool
-        self.output_dir = (
-            pathlib.Path(output_dir)
-            if output_dir
-            else pathlib.Path(f"/tmp/{self.name}.AppDir")
-        )
-        self.path = path
-        self.arch = arch
-        self.only_appdir = only_appdir
-        self.keep_appdir = keep_appdir
-        self.extension = extension
+    def _bootstrap_apprun(self) -> None:
+        destination = self.root_dir / "AppRun"
+        with open(destination, "x") as apprun:
+            apprun.write(self.apprun_content)
+        destination.chmod(self.permissions)
 
-    # bootstrap all the necessary directories and package an AppImage
-    def __call__(self) -> None:
-        self.bootstrap_dirs()
-        self.bootstrap_root()
-        self.bootstrap_usr()
-        if not self.only_appdir:
-            self.package()
-        if not (self.only_appdir or self.keep_appdir):
-            self.cleanup()
+    def _bootstrap_desktop(self) -> None:
+        destination = self.root_dir / f"{self.executable_name}.desktop"
+        with open(destination, "x") as desktop:
+            desktop.write(
+                self.desktop_content.format(
+                    name=self.executable_name, executable=self.executable_name
+                )
+            )
+
+    def _bootstrap_icon(self) -> None:
+        target = self.root_dir / "icon.svg"
+        with open(target, "x") as icon:
+            icon.write(self.icon)
+
+    def bootstrap_appdir(self) -> None:
+        self._bootstrap_apprun()
+        self._bootstrap_desktop()
+        self._bootstrap_icon()
+
+
+@dataclass
+class UsrBootstraper:
+    binaries: Iterable[Iterable[Path]]
+    libraries: Iterable[Iterable[Path]]
+    root_dir: Path = Path("AppDir")
+
+    def _copy_libraries(self) -> None:
+        for library, path in self.libraries:
+            target = (
+                self.root_dir / path / library.parts[-1]
+                if (self.root_dir / path).is_dir()
+                else self.root_dir / path
+            )
+            copyfile(library, target)
+
+    def _copy_binaries(self) -> None:
+        for binary, path in self.binaries:
+            target = (
+                self.root_dir / path / binary.parts[-1]
+                if (self.root_dir / path).is_dir()
+                else self.root_dir / path
+            )
+            copyfile(binary, target)
+
+    def bootstrap_usr(self) -> None:
+        self._copy_libraries()
+        self._copy_binaries()
+
+
+@dataclass
+class LibraryDefiner:
+    executable_path: Path
+    root_dir: Path = Path("usr/lib")
 
     def _ldd_stdout(self) -> bytes:
         try:
-            proc = sp.run(
-                ["ldd", self.executable_path], stdout=sp.PIPE, check=True
-            )
+            proc = run(["ldd", self.executable_path], stdout=PIPE, check=True)
         except OSError:
-            logging.error(f"Could not execute {self.packaging_tool}!")
-        except sp.CalledProcessError as e:
+            logging.error("Could not execute ldd!")
+        except CalledProcessError as e:
             match e.returncode:
                 case 127:
-                    logging.error("ldd exited with errors!")
+                    logging.error("ldd exited with error code 127!")
                     raise SystemExit(1)
                 case 1:
                     return e.stdout
+                case _:
+                    logging.error("ldd exited with errors!")
+                    raise SystemExit(1)
         else:
             return proc.stdout
 
@@ -97,88 +144,50 @@ Categories=Utility;"""
         lines = self._ldd_stdout().decode().split()
         return list(filter(lambda i: "/lib" in i, lines))
 
-    def _make_postfix(self) -> None:
-        postfix = "".join(
-            random.choices(string.digits + string.ascii_letters, k=8)
-        )
-        self.output_dir = pathlib.Path(f"{self.output_dir}.{postfix}")
+    def get_libraries(self) -> list[tuple[Path]]:
+        libraries = [Path(path) for path in self._get_libraries()]
+        return [(path, self.root_dir / path.parts[-1]) for path in libraries]
 
-    def _make_name(self) -> str:
-        return f"{self.name}.{self.extension}" if self.extension else self.name
+
+@dataclass
+class Packer:
+    executable_name: str
+    output: Path | None = None
+    arch: str = "x86_64"
+    appimagetool: Path | str = "appimagetool.AppImage"
+    root_dir: Path = Path("AppDir")
 
     def package(self) -> None:
         env = os.environ.copy()
         env["ARCH"] = self.arch
         try:
-            sp.run(
+            run(
                 [
-                    self.packaging_tool,
-                    self.output_dir,
-                    pathlib.Path(f"{self.path}/{self._make_name()}"),
+                    self.appimagetool,
+                    self.root_dir,
+                    (
+                        self.executable_name
+                        if self.output is None
+                        else self.output
+                    ),
                 ],
                 check=True,
                 env=env,
             )
         except OSError:
-            logging.error(f"Could not execute {self.packaging_tool}!")
-        except sp.CalledProcessError:
-            logging.error(f"{self.packaging_tool} exited with errors!")
+            logging.error(f"Could not execute {self.appimagetool}!")
+        except CalledProcessError:
+            logging.error(f"{self.appimagetool} exited with errors!")
             raise SystemExit(1)
 
-    def cleanup(self) -> None:
-        shutil.rmtree(self.output_dir)
-
-    # make the basic structure
-    def bootstrap_root(self) -> None:
-        self.bootstrap_apprun()
-        self.bootstrap_desktop()
-        self.bootstrap_icon()
-
-    def bootstrap_dirs(self) -> None:
-        try:
-            self.output_dir.mkdir()
-        except FileExistsError:
-            self._make_postfix()
-            self.output_dir.mkdir()
-
-        for subpath in ["usr", "usr/lib", "usr/bin"]:
-            pathlib.Path(self.output_dir, subpath).mkdir()
-
-    def bootstrap_icon(self) -> None:
-        with open(f"{self.output_dir}/icon.svg", "x") as icon:
-            icon.write(self.icon)
-
-    def bootstrap_apprun(self) -> None:
-        with open(f"{self.output_dir}/AppRun", "x") as desktop:
-            desktop.write(self.apprun_content)
-            os.chmod(f"{self.output_dir}/AppRun", self.permissions)
-
-    def bootstrap_desktop(self) -> None:
-        with open(f"{self.output_dir}/{self.name}.desktop", "x") as desktop:
-            desktop.write(
-                self.desktop_content.format(
-                    name=self.name.capitalize(),
-                    executable=self.name.lower(),
-                )
-            )
-
-    def bootstrap_usr(self) -> None:
-        for library in self._get_libraries():
-            try:
-                shutil.copy(library, f"{self.output_dir}/usr/lib/")
-            except FileNotFoundError:
-                logging.error(f"File {library} not found!")
-                raise SystemExit(1)
-        try:
-            shutil.copy(self.executable_path, f"{self.output_dir}/usr/bin")
-        except FileNotFoundError:
-            logging.error(f"File {self.executable_path} not found!")
-            raise SystemExit(1)
+    def _get_libraries(self) -> list[str]:
+        lines = self._ldd_stdout().decode().split()
+        return list(filter(lambda i: "/lib" in i, lines))
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        "AppImage Packer", description="A script for packaging AppImages."
+    parser = ArgumentParser(
+        "appimage-packer", description="A script for packaging AppImages."
     )
     parser.add_argument(
         "-e",
@@ -188,25 +197,20 @@ def main() -> None:
     )
     parser.add_argument(
         "-p",
-        "--packaging-tool",
+        "--appimagetool",
         help="Path to the executable AppImageTool AppImage.",
         default="appimagetool.AppImage",
     )
     parser.add_argument(
-        "-oa",
-        "--output-appdir-path",
-        help="The output AppDir directory.",
-    )
-    parser.add_argument(
-        "-of",
-        "--output-file-path",
-        help="The output AppImage file directory.",
-        default=".",
-    )
-    parser.add_argument(
-        "--extension",
-        help="extension of an output file.",
+        "-o",
+        "--output",
+        help="The output AppImage file or directory.",
         default="",
+    )
+    parser.add_argument(
+        "--appdir-location",
+        help="Location of an AppDir.",
+        default="/tmp/",
     )
     parser.add_argument(
         "--arch",
@@ -214,29 +218,55 @@ def main() -> None:
         default="x86_64",
     )
     parser.add_argument(
-        "--only-appdir",
-        help="Make an AppDir only.",
+        "--keep-appdir",
+        help="Keep an AppDir after packing.",
         action="store_true",
-        default=False,
     )
     parser.add_argument(
-        "--keep-appdir",
-        help="Keep an AppDir after packaging.",
+        "--appdir-only",
+        help="Make only an AppDir.",
         action="store_true",
-        default=False,
     )
     args = parser.parse_args()
-    packer = Packer(
-        args.executable_path,
-        args.output_appdir_path,
-        args.packaging_tool,
-        args.output_file_path,
-        args.arch,
-        args.only_appdir,
-        args.keep_appdir,
-        args.extension,
+
+    executable_path = Path(args.executable_path)
+    executable = executable_path.parts[-1]
+    root_dir = Path(args.appdir_location) / f"{executable}.AppDir"
+    output = args.output if args.output else executable
+
+    if root_dir.exists():
+        rmtree(root_dir)
+
+    layout = Layout(["usr/lib", "usr/bin"], root_dir)
+    library_definer = LibraryDefiner(executable_path)
+    usr_bootstraper = UsrBootstraper(
+        [
+            [
+                executable_path,
+                Path("usr/bin"),
+            ]
+        ],
+        library_definer.get_libraries(),
+        root_dir,
     )
-    packer()
+    appdir_bootstraper = AppDirBootstraper(executable, root_dir)
+    packer = Packer(
+        executable,
+        output,
+        args.arch,
+        args.appimagetool,
+        root_dir,
+    )
+
+    layout.make_layout()
+    usr_bootstraper.bootstrap_usr()
+    appdir_bootstraper.bootstrap_appdir()
+
+    if not args.appdir_only:
+        packer.package()
+
+    if not args.keep_appdir and not args.appdir_only:
+        rmtree(root_dir)
 
 
 if __name__ == "__main__":

@@ -94,23 +94,20 @@ class UsrBootstraper:
     binaries: Iterable[Iterable[Path]]
     libraries: Iterable[Iterable[Path]]
 
-    def _copy_libraries(self) -> None:
-        for library, path in self.libraries:
+    def _copy_files(self, files: Iterable[Iterable[Path]]) -> None:
+        for file, path in files:
             target = (
-                self.root_dir / path / library.parts[-1]
+                self.root_dir / path / file.parts[-1]
                 if (self.root_dir / path).is_dir()
                 else self.root_dir / path
             )
-            copyfile(library, target)
+            copyfile(file, target)
+
+    def _copy_libraries(self) -> None:
+        self._copy_files(self.libraries)
 
     def _copy_binaries(self) -> None:
-        for binary, path in self.binaries:
-            target = (
-                self.root_dir / path / binary.parts[-1]
-                if (self.root_dir / path).is_dir()
-                else self.root_dir / path
-            )
-            copyfile(binary, target)
+        self._copy_files(self.binaries)
 
     def bootstrap_usr(self) -> None:
         self._copy_libraries()

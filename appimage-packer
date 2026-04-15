@@ -17,9 +17,9 @@ logging.basicConfig(format="%(levelname)s:%(message)s")
 
 @dataclass
 class Layout:
+    root_dir: Path
     paths: Iterable[Path]
-    root_dir: Path = Path("AppDir")
-    symlinks: Iterable[Iterable[Path]] = ()
+    symlinks: Iterable[Iterable[Path]]
 
     def _make_dirs(self) -> None:
         for path in self.paths:
@@ -59,8 +59,8 @@ Type=Application
 Categories=Utility;"""
     icon: ClassVar[str] = ""
 
+    root_dir: Path
     executable_name: str
-    root_dir: Path = Path("AppDir")
 
     def _bootstrap_apprun(self) -> None:
         destination = self.root_dir / "AppRun"
@@ -90,9 +90,9 @@ Categories=Utility;"""
 
 @dataclass
 class UsrBootstraper:
+    root_dir: Path
     binaries: Iterable[Iterable[Path]]
     libraries: Iterable[Iterable[Path]]
-    root_dir: Path = Path("AppDir")
 
     def _copy_libraries(self) -> None:
         for library, path in self.libraries:
@@ -119,8 +119,8 @@ class UsrBootstraper:
 
 @dataclass
 class LibraryDefiner:
+    root_dir: Path
     executable_path: Path
-    root_dir: Path = Path("usr/lib")
 
     def _ldd_stdout(self) -> bytes:
         try:
@@ -151,26 +151,18 @@ class LibraryDefiner:
 
 @dataclass
 class Packer:
+    root_dir: Path
     executable_name: str
-    output: Path | None = None
-    arch: str = "x86_64"
-    appimagetool: Path | str = "appimagetool.AppImage"
-    root_dir: Path = Path("AppDir")
+    output: Path
+    arch: str
+    appimagetool: Path | str
 
     def package(self) -> None:
         env = os.environ.copy()
         env["ARCH"] = self.arch
         try:
             run(
-                [
-                    self.appimagetool,
-                    self.root_dir,
-                    (
-                        self.executable_name
-                        if self.output is None
-                        else self.output
-                    ),
-                ],
+                [self.appimagetool, self.root_dir, self.executable_name],
                 check=True,
                 env=env,
             )
@@ -237,25 +229,26 @@ def main() -> None:
     if root_dir.exists():
         rmtree(root_dir)
 
-    layout = Layout(["usr/lib", "usr/bin"], root_dir)
-    library_definer = LibraryDefiner(executable_path)
+    layout = Layout(
+        root_dir,
+        ["usr/lib", "usr/bin"],
+        [],
+    )
+    library_definer = LibraryDefiner(root_dir, executable_path)
     usr_bootstraper = UsrBootstraper(
+        root_dir,
         [
-            [
-                executable_path,
-                Path("usr/bin"),
-            ]
+            [executable_path, Path("usr/bin")],
         ],
         library_definer.get_libraries(),
-        root_dir,
     )
-    appdir_bootstraper = AppDirBootstraper(executable, root_dir)
+    appdir_bootstraper = AppDirBootstraper(root_dir, executable)
     packer = Packer(
+        root_dir,
         executable,
         output,
         args.arch,
         args.appimagetool,
-        root_dir,
     )
 
     layout.make_layout()

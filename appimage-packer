@@ -149,7 +149,6 @@ class LibraryDefiner:
 @dataclass
 class Packer:
     root_dir: Path
-    executable_name: str
     output: Path
     arch: str
     appimagetool: Path | str
@@ -159,7 +158,7 @@ class Packer:
         env["ARCH"] = self.arch
         try:
             run(
-                [self.appimagetool, self.root_dir, self.executable_name],
+                [self.appimagetool, self.root_dir, self.output],
                 check=True,
                 env=env,
             )
@@ -242,7 +241,6 @@ def main() -> None:
     appdir_bootstraper = AppDirBootstraper(root_dir, executable)
     packer = Packer(
         root_dir,
-        executable,
         output,
         args.arch,
         args.appimagetool,

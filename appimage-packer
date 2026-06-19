@@ -93,6 +93,7 @@ class UsrBootstraper:
     root_dir: Path
     binaries: Iterable[Iterable[Path]]
     libraries: Iterable[Iterable[Path]]
+    permissions: ClassVar[int] = 0o755
 
     def _copy_files(self, files: Iterable[Iterable[Path]]) -> None:
         for file, path in files:
@@ -108,6 +109,13 @@ class UsrBootstraper:
 
     def _copy_binaries(self) -> None:
         self._copy_files(self.binaries)
+        for file, path in self.binaries:
+            target = (
+                self.root_dir / path / file.parts[-1]
+                if (self.root_dir / path).is_dir()
+                else self.root_dir / path
+            )
+            target.chmod(self.permissions)
 
     def bootstrap_usr(self) -> None:
         self._copy_libraries()
@@ -143,7 +151,10 @@ class LibraryDefiner:
 
     def get_libraries(self) -> list[tuple[Path]]:
         libraries = [Path(path) for path in self._get_libraries()]
-        return [(path, self.root_dir / path.parts[-1]) for path in libraries]
+        return [
+            (path, self.root_dir / "usr" / "lib" / path.parts[-1])
+            for path in libraries
+        ]
 
 
 @dataclass
